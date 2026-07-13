@@ -5,6 +5,32 @@ lambda_ssim: 0.2
 lambda_lpips: 0.0
 lpips_net: alex
 
+lr_decay:
+  enabled: true
+  final_factor: 0.2
+
+densification:
+  enabled: true
+  from_iter: 500
+  until_iter: 6000
+  every: 500
+  grad_threshold: 0.00005
+  max_new_points: 5000
+  jitter_scale: 0.25
+  scale_shrink: 0.8
+  max_points: 300000
+
+pruning:
+  enabled: true
+  every: 1000
+  opacity_threshold: 0.005
+  min_points: 5000
+
+opacity_reset:
+  enabled: true
+  every: 3000
+  value: 0.1
+
 learning_rates:
   means_lr: 0.00016
   scales_lr: 0.005

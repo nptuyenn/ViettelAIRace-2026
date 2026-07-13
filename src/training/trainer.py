@@ -34,11 +34,60 @@ class Trainer:
             points_rgb = torch.rand(n, 3).numpy()
 
         self.model = GaussianModel(points_xyz, points_rgb, device)
-
-        lr_config = config["learning_rates"]
-        self.optimizer = torch.optim.Adam(self.model.optimizer_param_groups(lr_config), eps=1e-15)
-
+        self.lr_config = config["learning_rates"]
+        self.optimizer = self._build_optimizer()
         self.gt_images = [None] * len(self.scene)
+
+    def _build_optimizer(self):
+        return torch.optim.Adam(self.model.optimizer_param_groups(self.lr_config), eps=1e-15)
+
+    def _update_learning_rates(self, step, num_iters):
+        decay_config = self.config.get("lr_decay", {})
+        if not decay_config.get("enabled", False):
+            return
+
+        final_factor = float(decay_config.get("final_factor", 1.0))
+        progress = min(max(step / max(num_iters, 1), 0.0), 1.0)
+        factor = final_factor ** progress
+
+        for group in self.optimizer.param_groups:
+            name = group.get("name")
+            base_lr = self.lr_config.get(f"{name}_lr")
+            if base_lr is not None:
+                group["lr"] = base_lr * factor
+
+    def _maybe_refine_gaussians(self, step, num_iters):
+        stats = {"added": 0, "pruned": 0, "opacity_reset": False}
+        topology_changed = False
+
+        densify_config = self.config.get("densification", {})
+        if densify_config.get("enabled", False):
+            from_iter = int(densify_config.get("from_iter", 0))
+            until_iter = int(densify_config.get("until_iter", num_iters))
+            every = int(densify_config.get("every", 0))
+            if every > 0 and from_iter <= step <= until_iter and step % every == 0:
+                stats["added"] = self.model.densify_from_gradients(densify_config)
+                topology_changed = topology_changed or stats["added"] > 0
+
+        pruning_config = self.config.get("pruning", {})
+        if pruning_config.get("enabled", False):
+            every = int(pruning_config.get("every", 0))
+            if every > 0 and step > 0 and step % every == 0:
+                stats["pruned"] = self.model.prune_low_opacity(pruning_config)
+                topology_changed = topology_changed or stats["pruned"] > 0
+
+        opacity_reset_config = self.config.get("opacity_reset", {})
+        if opacity_reset_config.get("enabled", False):
+            every = int(opacity_reset_config.get("every", 0))
+            if every > 0 and step > 0 and step % every == 0:
+                self.model.reset_opacity(opacity_reset_config.get("value", 0.1))
+                stats["opacity_reset"] = True
+
+        if topology_changed:
+            self.optimizer = self._build_optimizer()
+            self._update_learning_rates(step, num_iters)
+
+        return stats
 
     def _get_gt_image_tensor(self, index):
         if self.gt_images[index] is None:
@@ -64,6 +113,9 @@ class Trainer:
         indices = self.train_indices
 
         for iteration in range(start_iter, num_iters):
+            step = iteration + 1
+            self._update_learning_rates(step, num_iters)
+
             index = random.choice(indices)
             camera = self.scene.get_camera(index)
 
@@ -84,16 +136,22 @@ class Trainer:
                 lpips_net=self.config.get("lpips_net", "alex"),
             )
 
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
             self.optimizer.step()
 
-            if iteration % log_every == 0:
-                logger.info(f"iter={iteration} loss={loss.item():.4f} n_points={self.model.num_points()}")
+            refine_stats = self._maybe_refine_gaussians(step, num_iters)
 
-            if iteration % save_every == 0 and iteration > 0:
-                ckpt_path = output_checkpoint_dir / f"iter_{iteration:06d}.pth"
-                save_checkpoint(ckpt_path, self.model, self.optimizer, iteration)
+            if step % log_every == 0 or refine_stats["added"] > 0 or refine_stats["pruned"] > 0:
+                logger.info(
+                    f"iter={step} loss={loss.item():.4f} n_points={self.model.num_points()} "
+                    f"added={refine_stats['added']} pruned={refine_stats['pruned']} "
+                    f"opacity_reset={refine_stats['opacity_reset']}"
+                )
+
+            if step % save_every == 0:
+                ckpt_path = output_checkpoint_dir / f"iter_{step:06d}.pth"
+                save_checkpoint(ckpt_path, self.model, self.optimizer, step)
 
         final_path = output_checkpoint_dir / f"iter_{num_iters:06d}.pth"
         save_checkpoint(final_path, self.model, self.optimizer, num_iters)

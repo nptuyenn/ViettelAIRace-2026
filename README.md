@@ -14,9 +14,9 @@ data/public_set/<scene>/train/sparse/0/
 data/public_set/<scene>/test/images/
 data/public_set/<scene>/test/test_poses.csv
 
-data/private_test1/<scene>/train/images/
-data/private_test1/<scene>/train/sparse/0/
-data/private_test1/<scene>/test/test_poses.csv
+data/private_set1/<scene>/train/images/
+data/private_set1/<scene>/train/sparse/0/
+data/private_set1/<scene>/test/test_poses.csv
 ```
 
 Nếu data không nằm trong thư mục `./data`, đặt biến môi trường `DATA_ROOT` trước khi chạy:
@@ -25,7 +25,7 @@ Nếu data không nằm trong thư mục `./data`, đặt biến môi trường 
 $env:DATA_ROOT="D:\duong_dan_toi_data"
 ```
 
-Thư mục đó phải chứa `public_set/` và/hoặc `private_test1/`. Nếu muốn đổi nơi lưu checkpoint/render, đặt thêm:
+Thư mục đó phải chứa `public_set/` và/hoặc `private_set1/`. Nếu muốn đổi nơi lưu checkpoint/render, đặt thêm:
 
 ```powershell
 $env:OUTPUT_ROOT="D:\duong_dan_toi_outputs"
@@ -85,6 +85,17 @@ python scripts/validate_submission.py --split private
 python scripts/validate_submission.py --split private --zip outputs/submission_round1.zip
 ```
 
+
+## Cải thiện training hiện tại
+
+Pipeline train hiện đã bật một số cơ chế 3DGS quan trọng trong `configs/base_config.yaml`:
+
+- `lr_decay`: giảm learning rate dần về cuối train để fine-tune ổn định hơn.
+- `densification`: clone thêm Gaussian ở vùng có gradient cao, giúp model tăng chi tiết ở vùng còn lỗi.
+- `pruning`: bỏ Gaussian opacity thấp để giảm nhiễu/floater và tiết kiệm VRAM.
+- `opacity_reset`: reset opacity định kỳ để Gaussian còn cơ hội học lại phân bố alpha.
+- `lambda_lpips`: mặc định tắt, có thể bật nhẹ khi fine-tune để tối ưu cảm quan.
+
 ## Cấu trúc thư mục
 
 ```text
@@ -129,3 +140,4 @@ python scripts/validate_submission.py --split private --zip outputs/submission_r
     ├── checkpoints/.gitkeep          
     └── rendered/.gitkeep            
 ```
+
