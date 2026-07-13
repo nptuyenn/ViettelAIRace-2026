@@ -33,7 +33,7 @@ class Trainer:
             points_xyz = (torch.rand(n, 3).numpy() - 0.5) * 2.0
             points_rgb = torch.rand(n, 3).numpy()
 
-        self.model = GaussianModel(points_xyz, points_rgb, device)
+        self.model = GaussianModel(points_xyz, points_rgb, device, sh_degree=config.get("sh_degree", 0))
         self.lr_config = config["learning_rates"]
         self.optimizer = self._build_optimizer()
         self.gt_images = [None] * len(self.scene)

@@ -1,35 +1,35 @@
-num_iterations: 7000
+num_iterations: 20000
 log_every: 100
 save_every: 1000
-sh_degree: 0
+sh_degree: 2
 lambda_ssim: 0.2
 lambda_lpips: 0.0
 lpips_net: alex
 
 lr_decay:
   enabled: true
-  final_factor: 0.2
+  final_factor: 0.1
 
 densification:
   enabled: true
   from_iter: 500
-  until_iter: 6000
+  until_iter: 15000
   every: 500
-  grad_threshold: 0.00005
+  grad_threshold: 0.00004
   max_new_points: 5000
   jitter_scale: 0.25
   scale_shrink: 0.8
-  max_points: 300000
+  max_points: 500000
 
 pruning:
   enabled: true
   every: 1000
-  opacity_threshold: 0.005
+  opacity_threshold: 0.003
   min_points: 5000
 
 opacity_reset:
   enabled: true
-  every: 3000
+  every: 4000
   value: 0.1
 
 learning_rates:

@@ -1,6 +1,7 @@
 num_iterations: 7000
 log_every: 100
 save_every: 1000
+sh_degree: 0
 lambda_ssim: 0.2
 lambda_lpips: 0.0
 lpips_net: alex

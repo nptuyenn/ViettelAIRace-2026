@@ -5,10 +5,32 @@ import torch.nn as nn
 import numpy as np
 from gsplat import rasterization
 
+SH_C0 = 0.28209479177387814
+
 
 def inverse_sigmoid(x):
     x = x.clamp(1e-6, 1 - 1e-6)
     return torch.log(x / (1 - x))
+
+
+def num_sh_bases(sh_degree):
+    return (int(sh_degree) + 1) ** 2
+
+
+def rgb_to_sh(rgb, sh_degree):
+    coeffs = torch.zeros(
+        rgb.shape[0],
+        num_sh_bases(sh_degree),
+        3,
+        dtype=rgb.dtype,
+        device=rgb.device,
+    )
+    coeffs[:, 0, :] = (rgb - 0.5) / SH_C0
+    return coeffs
+
+
+def sh_to_rgb(sh_coeffs):
+    return (sh_coeffs[:, 0, :] * SH_C0 + 0.5).clamp(1e-4, 1 - 1e-4)
 
 
 def estimate_initial_log_scale(means, sample_count=1000, ref_count=10000):
@@ -33,9 +55,10 @@ def estimate_initial_log_scale(means, sample_count=1000, ref_count=10000):
 
 
 class GaussianModel(nn.Module):
-    def __init__(self, points_xyz, points_rgb, device):
+    def __init__(self, points_xyz, points_rgb, device, sh_degree=0):
         super().__init__()
         self.device = device
+        self.sh_degree = int(sh_degree)
         n = points_xyz.shape[0]
 
         means = torch.from_numpy(points_xyz).float().to(device)
@@ -53,7 +76,10 @@ class GaussianModel(nn.Module):
         self.scales = nn.Parameter(init_scale)
         self.quats = nn.Parameter(quats)
         self.opacities = nn.Parameter(opacities)
-        self.colors = nn.Parameter(inverse_sigmoid(colors))
+        if self.sh_degree > 0:
+            self.colors = nn.Parameter(rgb_to_sh(colors, self.sh_degree))
+        else:
+            self.colors = nn.Parameter(inverse_sigmoid(colors))
 
     def get_scales(self):
         return torch.exp(self.scales)
@@ -62,12 +88,16 @@ class GaussianModel(nn.Module):
         return torch.sigmoid(self.opacities).squeeze(-1)
 
     def get_colors(self):
+        if self.sh_degree > 0:
+            return self.colors
         return torch.sigmoid(self.colors)
 
     def get_quats(self):
         return self.quats / self.quats.norm(dim=-1, keepdim=True).clamp(min=1e-8)
 
     def render(self, viewmats, Ks, width, height, sh_degree=None):
+        active_sh_degree = self.sh_degree if sh_degree is None else min(int(sh_degree), self.sh_degree)
+        active_sh_degree = active_sh_degree if active_sh_degree > 0 else None
         colors = self.get_colors()
         render_colors, render_alphas, meta = rasterization(
             means=self.means,
@@ -79,6 +109,7 @@ class GaussianModel(nn.Module):
             Ks=Ks,
             width=width,
             height=height,
+            sh_degree=active_sh_degree,
             packed=False,
         )
         return render_colors[0], render_alphas[0], meta

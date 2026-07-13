@@ -49,6 +49,14 @@ python scripts/train.py --scene hcm0031 --split private --config configs/base_co
 python scripts/train_all_scenes.py --split private --config configs/base_config.yaml
 ```
 
+## Train canh tranh hon
+
+`configs/competitive.yaml` bat SH color degree 2, tang so iteration va noi gioi han densification. Nen dung sau khi da co baseline hop le vi thoi gian train/VRAM se cao hon:
+
+```
+python scripts/train_all_scenes.py --split private --config configs/competitive.yaml --no-resume
+```
+
 ## Render 1 scene
 
 ```
@@ -91,6 +99,7 @@ python scripts/validate_submission.py --split private --zip outputs/submission_r
 Pipeline train hiện đã bật một số cơ chế 3DGS quan trọng trong `configs/base_config.yaml`:
 
 - `lr_decay`: giảm learning rate dần về cuối train để fine-tune ổn định hơn.
+- `sh_degree`: `0` dùng RGB cố định như baseline; `2` trong `competitive.yaml` bật spherical harmonics để học màu phụ thuộc góc nhìn tốt hơn.
 - `densification`: clone thêm Gaussian ở vùng có gradient cao, giúp model tăng chi tiết ở vùng còn lỗi.
 - `pruning`: bỏ Gaussian opacity thấp để giảm nhiễu/floater và tiết kiệm VRAM.
 - `opacity_reset`: reset opacity định kỳ để Gaussian còn cơ hội học lại phân bố alpha.
@@ -105,6 +114,7 @@ Pipeline train hiện đã bật một số cơ chế 3DGS quan trọng trong `c
 ├── cai_thien_pipeline_3dgs.md        
 ├── configs/
 │   ├── base_config.yaml              # Cấu hình train mặc định cho số vòng lặp, loss và learning rate.
+│   ├── competitive.yaml              # Cấu hình train mạnh hơn: SH degree 2, nhiều iteration hơn và densification rộng hơn.
 │   └── scene_default.yaml            # Cấu hình mẫu để override riêng cho từng scene khi cần.
 ├── scripts/
 │   ├── train.py                      # Train một scene và lưu checkpoint vào outputs/checkpoints.
