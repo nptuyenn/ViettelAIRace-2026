@@ -1,0 +1,13 @@
+num_iterations: 7000
+log_every: 100
+save_every: 1000
+lambda_ssim: 0.2
+lambda_lpips: 0.0
+lpips_net: alex
+
+learning_rates:
+  means_lr: 0.00016
+  scales_lr: 0.005
+  quats_lr: 0.001
+  opacities_lr: 0.05
+  colors_lr: 0.0025
