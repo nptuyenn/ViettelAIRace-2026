@@ -51,10 +51,24 @@ python scripts/train_all_scenes.py --split private --config configs/base_config.
 
 ## Train canh tranh hon
 
-`configs/competitive.yaml` bat SH color degree 2, tang so iteration va noi gioi han densification. Nen dung sau khi da co baseline hop le vi thoi gian train/VRAM se cao hon:
+`configs/competitive.yaml` bat SH color degree 3, train 30k iteration va dung cac moc gan voi baseline Graphdeco 3DGS hon. Nen benchmark tren `public_set` truoc khi train private vi thoi gian train/VRAM se cao hon:
 
 ```
 python scripts/train_all_scenes.py --split private --config configs/competitive.yaml --no-resume
+```
+
+## Benchmark 1 scene public truoc khi train private
+
+Script nay train mot scene public voi holdout validation, tinh PSNR/SSIM/LPIPS va competition score noi bo. Mac dinh chon scene public dau tien neu khong truyen `--scene`.
+
+```
+python scripts/benchmark_public_scene.py --config configs/competitive.yaml --holdout-ratio 0.1 --no-resume --require-lpips
+```
+
+Co the dat nguong de fail som neu config chua on:
+
+```
+python scripts/benchmark_public_scene.py --config configs/competitive.yaml --holdout-ratio 0.1 --no-resume --require-lpips --min-score 0.55 --min-ssim 0.45 --max-lpips 0.45
 ```
 
 ## Render 1 scene
@@ -99,7 +113,7 @@ python scripts/validate_submission.py --split private --zip outputs/submission_r
 Pipeline train hiện đã bật một số cơ chế 3DGS quan trọng trong `configs/base_config.yaml`:
 
 - `lr_decay`: giảm learning rate dần về cuối train để fine-tune ổn định hơn.
-- `sh_degree`: `0` dùng RGB cố định như baseline; `2` trong `competitive.yaml` bật spherical harmonics để học màu phụ thuộc góc nhìn tốt hơn.
+- `sh_degree`: `0` dùng RGB cố định như baseline; `3` trong `competitive.yaml` bật spherical harmonics để học màu phụ thuộc góc nhìn tốt hơn.
 - `densification`: clone thêm Gaussian ở vùng có gradient cao, giúp model tăng chi tiết ở vùng còn lỗi.
 - `pruning`: bỏ Gaussian opacity thấp để giảm nhiễu/floater và tiết kiệm VRAM.
 - `opacity_reset`: reset opacity định kỳ để Gaussian còn cơ hội học lại phân bố alpha.
@@ -119,6 +133,7 @@ Pipeline train hiện đã bật một số cơ chế 3DGS quan trọng trong `c
 ├── scripts/
 │   ├── train.py                      # Train một scene và lưu checkpoint vào outputs/checkpoints.
 │   ├── train_all_scenes.py           # Train lần lượt toàn bộ scene trong public/private split.
+│   ├── benchmark_public_scene.py     # Train/evaluate một scene public holdout trước khi chạy private.
 │   ├── render.py                     # Render ảnh test cho một scene từ checkpoint mới nhất.
 │   ├── render_all_scenes.py          # Render toàn bộ scene đã có checkpoint.
 │   ├── eval_local.py                 # Đánh giá nội bộ trên holdout train images bằng PSNR/SSIM/LPIPS/score.
