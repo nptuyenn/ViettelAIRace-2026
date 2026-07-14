@@ -87,7 +87,8 @@ class Trainer:
         opacity_reset_config = self.config.get("opacity_reset", {})
         if opacity_reset_config.get("enabled", False):
             every = int(opacity_reset_config.get("every", 0))
-            if every > 0 and step > 0 and step % every == 0:
+            until_iter = int(opacity_reset_config.get("until_iter", num_iters - 1))
+            if every > 0 and step > 0 and step <= until_iter and step < num_iters and step % every == 0:
                 self.model.reset_opacity(opacity_reset_config.get("value", 0.1))
                 stats["opacity_reset"] = True
 

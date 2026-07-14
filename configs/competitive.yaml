@@ -34,6 +34,7 @@ pruning:
 opacity_reset:
   enabled: true
   every: 3000
+  until_iter: 15000
   value: 0.1
 
 learning_rates:
