@@ -53,6 +53,7 @@ def save_checkpoint(path, model, optimizer, iteration):
         "quats": model.quats.detach().cpu(),
         "opacities": model.opacities.detach().cpu(),
         "colors": model.colors.detach().cpu(),
+        "background": model.background.detach().cpu(),
         "sh_degree": getattr(model, "sh_degree", 0),
         "optimizer": optimizer.state_dict() if optimizer is not None else None,
     }, path)
@@ -69,6 +70,8 @@ def load_checkpoint(path, model, optimizer=None, device="cuda"):
         adapted_colors = adapt_checkpoint_colors(ckpt["colors"], target_sh_degree, device)
         optimizer_compatible = tuple(ckpt["colors"].shape) == tuple(adapted_colors.shape)
         model.colors.data = adapted_colors
+        if "background" in ckpt:
+            model.background.data = ckpt["background"].to(device)
     if optimizer is not None and ckpt.get("optimizer") is not None and optimizer_compatible:
         try:
             optimizer.load_state_dict(ckpt["optimizer"])

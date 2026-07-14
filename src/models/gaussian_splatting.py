@@ -55,7 +55,15 @@ def estimate_initial_log_scale(means, sample_count=1000, ref_count=10000):
 
 
 class GaussianModel(nn.Module):
-    def __init__(self, points_xyz, points_rgb, device, sh_degree=0):
+    def __init__(
+        self,
+        points_xyz,
+        points_rgb,
+        device,
+        sh_degree=0,
+        background_color=(0.0, 0.0, 0.0),
+        learn_background=False,
+    ):
         super().__init__()
         self.device = device
         self.sh_degree = int(sh_degree)
@@ -63,6 +71,7 @@ class GaussianModel(nn.Module):
 
         means = torch.from_numpy(points_xyz).float().to(device)
         colors = torch.from_numpy(points_rgb).float().to(device).clamp(1e-4, 1 - 1e-4)
+        background = torch.tensor(background_color, dtype=torch.float32, device=device).clamp(1e-4, 1 - 1e-4)
 
         init_log_scale = estimate_initial_log_scale(means)
         init_scale = torch.full((n, 3), float(init_log_scale), device=device)
@@ -80,6 +89,7 @@ class GaussianModel(nn.Module):
             self.colors = nn.Parameter(rgb_to_sh(colors, self.sh_degree))
         else:
             self.colors = nn.Parameter(inverse_sigmoid(colors))
+        self.background = nn.Parameter(inverse_sigmoid(background), requires_grad=bool(learn_background))
 
     def get_scales(self):
         return torch.exp(self.scales)
@@ -94,6 +104,9 @@ class GaussianModel(nn.Module):
 
     def get_quats(self):
         return self.quats / self.quats.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+
+    def get_background(self):
+        return torch.sigmoid(self.background)
 
     def render(self, viewmats, Ks, width, height, sh_degree=None):
         active_sh_degree = self.sh_degree if sh_degree is None else min(int(sh_degree), self.sh_degree)
@@ -112,16 +125,26 @@ class GaussianModel(nn.Module):
             sh_degree=active_sh_degree,
             packed=False,
         )
-        return render_colors[0], render_alphas[0], meta
+        render_color = render_colors[0]
+        render_alpha = render_alphas[0]
+        render_color = render_color + (1.0 - render_alpha) * self.get_background().view(1, 1, 3)
+        return render_color, render_alpha, meta
 
     def optimizer_param_groups(self, lr_config):
-        return [
+        groups = [
             {"params": [self.means], "lr": lr_config["means_lr"], "name": "means"},
             {"params": [self.scales], "lr": lr_config["scales_lr"], "name": "scales"},
             {"params": [self.quats], "lr": lr_config["quats_lr"], "name": "quats"},
             {"params": [self.opacities], "lr": lr_config["opacities_lr"], "name": "opacities"},
             {"params": [self.colors], "lr": lr_config["colors_lr"], "name": "colors"},
         ]
+        if self.background.requires_grad:
+            groups.append({
+                "params": [self.background],
+                "lr": lr_config.get("background_lr", lr_config["colors_lr"]),
+                "name": "background",
+            })
+        return groups
 
     def num_points(self):
         return self.means.shape[0]

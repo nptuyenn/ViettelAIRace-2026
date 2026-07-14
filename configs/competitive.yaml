@@ -6,6 +6,10 @@ lambda_ssim: 0.2
 lambda_lpips: 0.0
 lpips_net: alex
 
+background:
+  learnable: true
+  color: [0.5, 0.5, 0.5]
+
 lr_decay:
   enabled: true
   final_factor: 0.01
@@ -38,3 +42,4 @@ learning_rates:
   quats_lr: 0.001
   opacities_lr: 0.05
   colors_lr: 0.0025
+  background_lr: 0.0025
