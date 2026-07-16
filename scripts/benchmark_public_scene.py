@@ -5,18 +5,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import OUTPUT_ROOT, PUBLIC_SET_ROOT, get_scene_paths, list_scenes
+from config import OUTPUT_ROOT, SPLIT_CHOICES, get_scene_paths, get_split_root, list_scenes
 from data.dataset import SceneTrainData
 from data.splits import image_names_for_indices, make_holdout_split
 from eval_local import evaluate_local_scene
-from training.trainer import Trainer
 from utils.io_utils import read_yaml
 
 
-def first_public_scene():
-    scenes = list_scenes(PUBLIC_SET_ROOT)
+def first_scene(scene_root):
+    scenes = list_scenes(scene_root)
     if not scenes:
-        raise FileNotFoundError(f"No public scenes found in {PUBLIC_SET_ROOT}")
+        raise FileNotFoundError(f"No scenes found in {scene_root}")
     return scenes[0]
 
 
@@ -49,6 +48,7 @@ def fail_if_threshold_missed(result, args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene", default=None)
+    parser.add_argument("--split", default="public", choices=SPLIT_CHOICES)
     parser.add_argument("--config", default="configs/competitive.yaml")
     parser.add_argument("--holdout-ratio", type=float, default=0.1)
     parser.add_argument("--holdout-seed", type=int, default=2026)
@@ -65,14 +65,17 @@ def main():
     parser.add_argument("--max-lpips", type=float, default=None)
     args = parser.parse_args()
 
-    scene_name = args.scene or first_public_scene()
-    scene_paths = get_scene_paths(PUBLIC_SET_ROOT, scene_name)
+    scene_root = get_split_root(args.split)
+    scene_name = args.scene or first_scene(scene_root)
+    scene_paths = get_scene_paths(scene_root, scene_name)
     config = read_yaml(args.config)
 
     scene = SceneTrainData(scene_paths["train_images"], scene_paths["train_sparse"])
     _, val_indices = make_holdout_split(scene.cameras_list, args.holdout_ratio, args.holdout_seed)
     exclude_names = image_names_for_indices(scene.cameras_list, val_indices)
     print(f"{scene_name}: holdout {len(exclude_names)} / {len(scene.cameras_list)} train images")
+
+    from training.trainer import Trainer
 
     trainer = Trainer(scene_paths, config, device=args.device, exclude_image_names=exclude_names)
     checkpoint_root = Path(args.checkpoint_root)
@@ -93,7 +96,7 @@ def main():
 
     result = evaluate_local_scene(
         scene_name=scene_name,
-        scene_root=PUBLIC_SET_ROOT,
+        scene_root=scene_root,
         checkpoint_root=checkpoint_root,
         holdout_ratio=args.holdout_ratio,
         holdout_seed=args.holdout_seed,

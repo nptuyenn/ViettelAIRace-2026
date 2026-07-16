@@ -7,7 +7,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import PUBLIC_SET_ROOT, PRIVATE_TEST_ROOT, RENDERED_DIR, get_scene_paths, list_scenes
+from config import RENDERED_DIR, SPLIT_CHOICES, get_scene_paths, get_split_root, list_scenes
 from data.pose_loader import load_test_poses
 
 
@@ -114,12 +114,12 @@ def validate_zip(scene_root, zip_path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", default="private", choices=["public", "private"])
+    parser.add_argument("--split", default="private", choices=SPLIT_CHOICES)
     parser.add_argument("--rendered_dir", default=str(RENDERED_DIR))
     parser.add_argument("--zip", default=None)
     args = parser.parse_args()
 
-    scene_root = PUBLIC_SET_ROOT if args.split == "public" else PRIVATE_TEST_ROOT
+    scene_root = get_split_root(args.split)
     all_errors = validate_zip(scene_root, args.zip) if args.zip else validate_rendered_dir(scene_root, args.rendered_dir)
 
     if len(all_errors) == 0:

@@ -4,22 +4,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import PUBLIC_SET_ROOT, PRIVATE_TEST_ROOT, CHECKPOINT_DIR, RENDERED_DIR, get_scene_paths, list_scenes
+from config import CHECKPOINT_DIR, RENDERED_DIR, SPLIT_CHOICES, get_scene_paths, get_split_root, list_scenes
 from data.pose_loader import load_test_poses
-from inference.renderer import load_model_for_inference, render_all_poses
 from inference.postprocess import save_scene_renders
-from training.checkpoint import find_latest_checkpoint
 from utils.logger import get_logger
 
 logger = get_logger("render_all_scenes")
 
 
+def find_latest_checkpoint(checkpoint_dir):
+    checkpoint_dir = Path(checkpoint_dir)
+    ckpts = sorted(checkpoint_dir.glob("iter_*.pth"))
+    return ckpts[-1] if ckpts else None
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", default="private", choices=["public", "private"])
+    parser.add_argument("--split", default="private", choices=SPLIT_CHOICES)
     args = parser.parse_args()
 
-    scene_root = PUBLIC_SET_ROOT if args.split == "public" else PRIVATE_TEST_ROOT
+    scene_root = get_split_root(args.split)
     scenes = list_scenes(scene_root)
 
     for scene_name in scenes:
@@ -31,6 +35,9 @@ def main():
             continue
 
         test_poses = load_test_poses(scene_paths["test_poses_csv"])
+
+        from inference.renderer import load_model_for_inference, render_all_poses
+
         model = load_model_for_inference(checkpoint_path, None, None, device="cuda")
         rendered_dict = render_all_poses(model, test_poses, device="cuda")
 

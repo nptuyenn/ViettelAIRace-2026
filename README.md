@@ -31,6 +31,14 @@ Thư mục đó phải chứa `public_set/` và/hoặc `private_set1/`. Nếu mu
 $env:OUTPUT_ROOT="D:\duong_dan_toi_outputs"
 ```
 
+Với bộ data round2 có cấu trúc scene trực tiếp như `VAI_NVS_DATA_ROUND2/<scene>/train/...`, đặt:
+
+```powershell
+$env:ROUND2_ROOT="D:\ViettelAIRace-2026\VAI_NVS_DATA_ROUND2"
+```
+
+Sau đó dùng `--split round2`.
+
 ## Train 1 scene
 
 ```
@@ -49,6 +57,12 @@ python scripts/train.py --scene hcm0031 --split private --config configs/base_co
 python scripts/train_all_scenes.py --split private --config configs/base_config.yaml
 ```
 
+## Train round2
+
+```
+python scripts/train_all_scenes.py --split round2 --config configs/competitive.yaml --no-resume
+```
+
 ## Train canh tranh hon
 
 `configs/competitive.yaml` bat SH color degree 3, train 30k iteration va dung cac moc gan voi baseline Graphdeco 3DGS hon. Nen benchmark tren `public_set` truoc khi train private vi thoi gian train/VRAM se cao hon:
@@ -63,6 +77,12 @@ Script nay train mot scene public voi holdout validation, tinh PSNR/SSIM/LPIPS v
 
 ```
 python scripts/benchmark_public_scene.py --config configs/competitive.yaml --holdout-ratio 0.1 --no-resume --require-lpips
+```
+
+Với round2:
+
+```
+python scripts/benchmark_public_scene.py --split round2 --config configs/competitive.yaml --holdout-ratio 0.1 --no-resume --require-lpips --min-score 0.60
 ```
 
 Co the dat nguong de fail som neu config chua on:

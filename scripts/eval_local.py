@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import PUBLIC_SET_ROOT, PRIVATE_TEST_ROOT, CHECKPOINT_DIR, OUTPUT_ROOT, get_scene_paths, list_scenes
+from config import CHECKPOINT_DIR, OUTPUT_ROOT, SPLIT_CHOICES, get_scene_paths, get_split_root, list_scenes
 from data.dataset import SceneTrainData
 from data.splits import make_holdout_split
 from utils.io_utils import read_image_as_array
@@ -77,7 +77,7 @@ def mean_or_none(values):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene")
-    parser.add_argument("--split", default="private", choices=["public", "private"])
+    parser.add_argument("--split", default="private", choices=SPLIT_CHOICES)
     parser.add_argument("--checkpoint-dir", default=str(CHECKPOINT_DIR))
     parser.add_argument("--holdout-ratio", type=float, default=0.1)
     parser.add_argument("--holdout-seed", type=int, default=2026)
@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--output", default=str(OUTPUT_ROOT / "local_eval.json"))
     args = parser.parse_args()
 
-    scene_root = PUBLIC_SET_ROOT if args.split == "public" else PRIVATE_TEST_ROOT
+    scene_root = get_split_root(args.split)
     scenes = [args.scene] if args.scene else list_scenes(scene_root)
 
     lpips_evaluator = None

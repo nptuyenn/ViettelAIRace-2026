@@ -1,73 +1,25 @@
 # Hướng Dẫn Train Trên Máy GPU Thuê
 
-Tài liệu này dùng cho lần sau khi thuê máy GPU mới để train repo `ViettelAIRace-2026`.
+Tài liệu này ưu tiên tiết kiệm thời gian thuê GPU. Việc nén data nên làm **trước khi khởi động máy GPU**.
 
-Mục tiêu:
-
-- Không tốn cả giờ GPU chỉ để copy data bằng `scp -r`.
-- Benchmark trên `public_set` trước khi train `private_set1`.
-- Có thể resume nếu mất kết nối.
-- Validate đầy đủ trước khi đóng gói file submission.
-
-## 0. Cách Nhanh Hơn `scp -r`
-
-`scp -r` chậm vì dataset có nhiều file ảnh nhỏ. Cách nên dùng nhất là nén data thành một file lớn rồi upload.
-
-### Cách Khuyên Dùng: Nén Data Thành Một File
+## 0. Làm Trước Khi Bật GPU
 
 Trên máy local Windows, mở Git Bash:
 
 ```bash
 cd /d/ViettelAIRace-2026
-tar -czf data_viettel.tar.gz data/public_set data/private_set1
+git pull origin main
+tar -czf data_viettel.tar.gz VAI_NVS_DATA_ROUND2 data/public_set data/private_set1
+ls -lh data_viettel.tar.gz
 ```
 
-Upload một file lên server GPU:
+Giữ file `data_viettel.tar.gz` lại. Lần sau nếu data không đổi thì không cần nén lại.
 
-```bash
-scp -P PORT data_viettel.tar.gz root@IP:~/viettel_airace/
-```
+## 1. Khi Có Máy GPU Mới
 
-Trên server GPU, giải nén:
+Thay `PORT` và `IP` bằng thông tin nhà cung cấp đưa.
 
-```bash
-cd ~/viettel_airace
-tar -xzf data_viettel.tar.gz
-ls -lah ~/viettel_airace/data
-```
-
-Cần thấy:
-
-```text
-public_set
-private_set1
-```
-
-### Cách Có Resume: Dùng `rsync`
-
-Nếu Git Bash có `rsync`, có thể dùng cách này để copy tiếp phần thiếu nếu bị ngắt mạng:
-
-```bash
-rsync -avh --progress --partial -e "ssh -p PORT" /d/ViettelAIRace-2026/data/public_set root@IP:~/viettel_airace/data/
-rsync -avh --progress --partial -e "ssh -p PORT" /d/ViettelAIRace-2026/data/private_set1 root@IP:~/viettel_airace/data/
-```
-
-Nếu bị mất kết nối, chạy lại đúng lệnh cũ. `rsync` sẽ chỉ copy phần còn thiếu.
-
-### Cách Tốt Nhất Nếu Có Persistent Volume
-
-Nếu nhà cung cấp GPU cho attach volume riêng:
-
-1. Tạo volume lưu data, ví dụ `/workspace/data`.
-2. Upload hoặc tải data vào volume một lần.
-3. Lần sau thuê máy mới thì attach lại volume đó.
-4. Không cần copy data lại từ máy local.
-
-Đây là cách tiết kiệm tiền GPU nhất nếu bạn phải thuê máy nhiều lần.
-
-## 1. SSH Vào Máy GPU
-
-Dùng lệnh nhà cung cấp đưa. Ví dụ:
+Từ máy local, SSH thử:
 
 ```bash
 ssh -p PORT root@IP
@@ -80,23 +32,54 @@ ssh-keygen -R "[IP]:PORT"
 ssh -p PORT root@IP
 ```
 
-Kiểm tra GPU:
+Upload data archive từ máy local:
 
 ```bash
-nvidia-smi
+scp -P PORT /d/ViettelAIRace-2026/data_viettel.tar.gz root@IP:~/viettel_airace/
 ```
 
-Với RTX 3090, nên thấy GPU 24GB VRAM.
+## 2. Setup Server GPU
 
-## 2. Chuẩn Bị Thư Mục
-
-Trên server:
+Chạy block này trên server sau khi SSH vào:
 
 ```bash
-mkdir -p ~/viettel_airace/data ~/viettel_airace/outputs
+mkdir -p ~/viettel_airace/outputs
+cd ~/viettel_airace
+tar -xzf data_viettel.tar.gz
+
+apt-get update
+apt-get install -y git build-essential ninja-build tmux python3-dev python3.10-dev
+
+cd ~
+git clone https://github.com/nptuyenn/ViettelAIRace-2026.git || true
+cd ~/ViettelAIRace-2026
+git pull origin main
+
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+pip3 install -q pyyaml lpips tqdm pillow numpy ninja packaging jaxtyping rich
+
+export MAX_JOBS=1
+export TORCH_CUDA_ARCH_LIST="8.6"
+pip3 install -v --no-build-isolation gsplat
 ```
 
-Sau khi upload hoặc giải nén data, kiểm tra:
+Kiểm tra môi trường:
+
+```bash
+python3 - <<'PY'
+import torch
+import gsplat
+from gsplat import rasterization
+print("torch:", torch.__version__)
+print("cuda:", torch.version.cuda)
+print("cuda available:", torch.cuda.is_available())
+print("gpu:", torch.cuda.get_device_name(0))
+print("capability:", torch.cuda.get_device_capability(0))
+print("gsplat OK")
+PY
+```
+
+Kiểm tra data:
 
 ```bash
 ls -lah ~/viettel_airace/data
@@ -104,60 +87,7 @@ ls ~/viettel_airace/data/public_set | head
 ls ~/viettel_airace/data/private_set1 | head
 ```
 
-## 3. Cài Tool Hệ Thống
-
-```bash
-apt-get update
-apt-get install -y git build-essential ninja-build tmux
-```
-
-## 4. Clone Repo
-
-```bash
-cd ~
-git clone https://github.com/nptuyenn/ViettelAIRace-2026.git
-cd ViettelAIRace-2026
-git pull origin main
-```
-
-Nếu repo đã tồn tại:
-
-```bash
-cd ~/ViettelAIRace-2026
-git pull origin main
-```
-
-## 5. Cài Python Package Cho RTX 3090
-
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
-pip install -q pyyaml lpips tqdm pillow numpy ninja packaging gsplat
-```
-
-Kiểm tra:
-
-```bash
-python - <<'PY'
-import torch
-print(torch.__version__)
-print(torch.version.cuda)
-print(torch.cuda.is_available())
-print(torch.cuda.get_device_name(0))
-print(torch.cuda.get_device_capability(0))
-PY
-```
-
-Cần thấy:
-
-```text
-cuda True
-RTX 3090
-capability (8, 6)
-```
-
-## 6. Chạy Trong `tmux`
-
-Dùng `tmux` để job train không chết khi mất SSH:
+## 3. Chạy Benchmark Public Trong `tmux`
 
 ```bash
 tmux new -s viettel
@@ -168,8 +98,29 @@ Trong `tmux`:
 ```bash
 cd ~/ViettelAIRace-2026
 export DATA_ROOT=~/viettel_airace/data
+export ROUND2_ROOT=~/viettel_airace/VAI_NVS_DATA_ROUND2
 export OUTPUT_ROOT=~/viettel_airace/outputs
+export MAX_JOBS=1
+export TORCH_CUDA_ARCH_LIST="8.6"
+
+rm -rf ~/viettel_airace/outputs/public_benchmark_checkpoints
+
+python3 scripts/benchmark_public_scene.py \
+  --split round2 \
+  --config configs/competitive.yaml \
+  --holdout-ratio 0.1 \
+  --no-resume \
+  --require-lpips \
+  --min-score 0.60
 ```
+
+Xem điểm:
+
+```bash
+cat ~/viettel_airace/outputs/public_benchmark.json
+```
+
+Nếu `score_mean < 0.60`, khoan train private.
 
 Thoát khỏi `tmux` mà job vẫn chạy:
 
@@ -183,34 +134,16 @@ Vào lại:
 tmux attach -t viettel
 ```
 
-## 7. Benchmark Public Trước
-
-Chạy một scene public với holdout validation. Điểm leaderboard 60/100 tương đương `score_mean >= 0.60`.
+## 4. Train Private Nếu Benchmark Ổn
 
 ```bash
-python scripts/benchmark_public_scene.py \
-  --config configs/competitive.yaml \
-  --holdout-ratio 0.1 \
-  --no-resume \
-  --require-lpips \
-  --min-score 0.60
-```
+cd ~/ViettelAIRace-2026
+export DATA_ROOT=~/viettel_airace/data
+export ROUND2_ROOT=~/viettel_airace/VAI_NVS_DATA_ROUND2
+export OUTPUT_ROOT=~/viettel_airace/outputs
 
-Xem report:
-
-```bash
-cat ~/viettel_airace/outputs/public_benchmark.json
-```
-
-Nếu score dưới `0.60`, khoan train private. Cần tune config/model tiếp.
-
-## 8. Train Private
-
-Chỉ chạy sau khi public benchmark ổn.
-
-```bash
-python scripts/train_all_scenes.py \
-  --split private \
+python3 scripts/train_all_scenes.py \
+  --split round2 \
   --config configs/competitive.yaml \
   --no-resume
 ```
@@ -218,44 +151,26 @@ python scripts/train_all_scenes.py \
 Nếu bị ngắt giữa chừng, resume bằng cách bỏ `--no-resume`:
 
 ```bash
-python scripts/train_all_scenes.py \
-  --split private \
+python3 scripts/train_all_scenes.py \
+  --split round2 \
   --config configs/competitive.yaml
 ```
 
-## 9. Render Private
+## 5. Render, Validate, Package
 
 ```bash
-python scripts/render_all_scenes.py --split private
-```
+python3 scripts/render_all_scenes.py --split round2
 
-## 10. Validate Rendered Folder
-
-```bash
-python scripts/validate_submission.py \
-  --split private \
+python3 scripts/validate_submission.py \
+  --split round2 \
   --rendered_dir ~/viettel_airace/outputs/rendered
-```
 
-Nếu báo thiếu file ở scene nào, render lại scene đó:
-
-```bash
-python scripts/render.py --scene SCENE_NAME --split private
-```
-
-## 11. Package Zip
-
-```bash
-python scripts/package_submission.py \
+python3 scripts/package_submission.py \
   --rendered_dir ~/viettel_airace/outputs/rendered \
   --output ~/viettel_airace/outputs/submission_round1.zip
-```
 
-Validate zip:
-
-```bash
-python scripts/validate_submission.py \
-  --split private \
+python3 scripts/validate_submission.py \
+  --split round2 \
   --zip ~/viettel_airace/outputs/submission_round1.zip
 ```
 
@@ -265,32 +180,15 @@ File nộp:
 ~/viettel_airace/outputs/submission_round1.zip
 ```
 
-## 12. Tải Zip Về Local
-
-Từ terminal local:
+Tải về local:
 
 ```bash
 scp -P PORT root@IP:~/viettel_airace/outputs/submission_round1.zip .
 ```
 
-Hoặc dùng File Browser của nhà cung cấp nếu có.
+## Ghi Chú Nhanh
 
-## 13. Checklist Rút Gọn
-
-```text
-1. SSH vào máy mới.
-2. Chạy nvidia-smi.
-3. Tạo ~/viettel_airace/data và ~/viettel_airace/outputs.
-4. Lấy data bằng archive/rsync/persistent volume.
-5. Clone repo và git pull.
-6. Cài torch + dependencies.
-7. Chạy tmux new -s viettel.
-8. Export DATA_ROOT và OUTPUT_ROOT.
-9. Chạy benchmark_public_scene.py --min-score 0.60.
-10. Nếu pass: train_all_scenes private.
-11. Render private.
-12. Validate rendered.
-13. Package submission.
-14. Validate zip.
-15. Download submission_round1.zip.
-```
+- Đừng dùng `scp -r` cho từng ảnh nếu không bắt buộc. Hãy upload `data_viettel.tar.gz`.
+- Nếu nhà cung cấp có persistent volume, hãy lưu data ở volume đó để lần sau không cần upload lại.
+- RTX 3090 dùng `TORCH_CUDA_ARCH_LIST="8.6"`.
+- Nếu build `gsplat` báo thiếu `Python.h`, cài `python3-dev python3.10-dev`.

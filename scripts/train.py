@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from config import PUBLIC_SET_ROOT, PRIVATE_TEST_ROOT, CHECKPOINT_DIR, get_scene_paths
+from config import CHECKPOINT_DIR, SPLIT_CHOICES, get_scene_paths, get_split_root
 from data.dataset import SceneTrainData
 from data.splits import image_names_for_indices, make_holdout_split
 from utils.io_utils import read_yaml
@@ -13,14 +13,14 @@ from utils.io_utils import read_yaml
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene", required=True)
-    parser.add_argument("--split", default="private", choices=["public", "private"])
+    parser.add_argument("--split", default="private", choices=SPLIT_CHOICES)
     parser.add_argument("--config", default="configs/base_config.yaml")
     parser.add_argument("--holdout-ratio", type=float, default=0.0)
     parser.add_argument("--holdout-seed", type=int, default=2026)
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
 
-    scene_root = PUBLIC_SET_ROOT if args.split == "public" else PRIVATE_TEST_ROOT
+    scene_root = get_split_root(args.split)
     scene_paths = get_scene_paths(scene_root, args.scene)
     config = read_yaml(args.config)
 

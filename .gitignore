@@ -5,6 +5,7 @@ data/public_set/*
 data/private_set1/*
 !data/public_set/.gitkeep
 !data/private_set1/.gitkeep
+VAI_NVS_DATA_ROUND2/
 
 outputs/*
 !outputs/checkpoints
@@ -16,6 +17,9 @@ outputs/rendered/*
 
 *.pth
 *.ckpt
+*.tar
+*.tar.gz
+*.tgz
 __pycache__/
 .ipynb_checkpoints/
 *.zip
