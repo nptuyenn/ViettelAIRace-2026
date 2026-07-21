@@ -55,6 +55,8 @@ def save_checkpoint(path, model, optimizer, iteration):
         "colors": model.colors.detach().cpu(),
         "background": model.background.detach().cpu(),
         "sh_degree": getattr(model, "sh_degree", 0),
+        "rasterize_mode": getattr(model, "rasterize_mode", "classic"),
+        "absgrad": getattr(model, "absgrad", False),
         "optimizer": optimizer.state_dict() if optimizer is not None else None,
     }, path)
 

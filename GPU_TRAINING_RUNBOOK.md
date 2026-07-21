@@ -134,6 +134,19 @@ python3 scripts/benchmark_public_scene.py \
 
 Lệnh fine-tune trên cố ý không có `--no-resume`, để tiếp tục từ checkpoint benchmark hiện có.
 
+Nếu checkpoint 40k vẫn chưa đạt `0.60`, tiếp tục metric-push lên 50k:
+
+```bash
+python3 scripts/benchmark_public_scene.py \
+  --split round2 \
+  --config configs/round2_metric_push.yaml \
+  --holdout-ratio 0.1 \
+  --require-lpips \
+  --min-score 0.60
+```
+
+Lệnh này cũng cố ý không có `--no-resume`, để resume từ checkpoint 40k.
+
 Thoát khỏi `tmux` mà job vẫn chạy:
 
 ```text

@@ -13,7 +13,14 @@ def load_model_for_inference(checkpoint_path, points_xyz_dummy, points_rgb_dummy
     sh_degree = ckpt.get("sh_degree", infer_sh_degree_from_colors(ckpt["colors"]))
     dummy_xyz = np.zeros((n, 3), dtype=np.float32)
     dummy_rgb = np.full((n, 3), 0.5, dtype=np.float32)
-    model = GaussianModel(dummy_xyz, dummy_rgb, device, sh_degree=sh_degree)
+    model = GaussianModel(
+        dummy_xyz,
+        dummy_rgb,
+        device,
+        sh_degree=sh_degree,
+        rasterize_mode=ckpt.get("rasterize_mode", "classic"),
+        absgrad=False,
+    )
     load_checkpoint(checkpoint_path, model, optimizer=None, device=device)
     model.eval()
     return model

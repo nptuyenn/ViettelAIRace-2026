@@ -1,11 +1,11 @@
-num_iterations: 40000
+num_iterations: 50000
 log_every: 100
 save_every: 1000
 sh_degree: 3
-lambda_ssim: 0.25
-lambda_lpips: 0.01
-lpips_from_iter: 30000
-lpips_every: 10
+lambda_ssim: 0.35
+lambda_lpips: 0.08
+lpips_from_iter: 40000
+lpips_every: 5
 lpips_net: alex
 
 background:
@@ -14,40 +14,40 @@ background:
 
 render:
   rasterize_mode: antialiased
-  absgrad: true
+  absgrad: false
 
 lr_decay:
   enabled: true
-  final_factor: 0.005
+  final_factor: 0.002
 
 densification:
-  enabled: true
+  enabled: false
   from_iter: 500
   until_iter: 20000
   every: 250
   grad_threshold: 0.00008
-  use_absgrad: true
+  use_absgrad: false
   max_new_points: 4000
   jitter_scale: 0.25
   scale_shrink: 0.8
   max_points: 700000
 
 pruning:
-  enabled: true
+  enabled: false
   every: 2000
   opacity_threshold: 0.002
   min_points: 5000
 
 opacity_reset:
-  enabled: true
+  enabled: false
   every: 3000
   until_iter: 15000
   value: 0.1
 
 learning_rates:
-  means_lr: 0.00012
-  scales_lr: 0.003
-  quats_lr: 0.0008
-  opacities_lr: 0.03
-  colors_lr: 0.002
-  background_lr: 0.001
+  means_lr: 0.00004
+  scales_lr: 0.0015
+  quats_lr: 0.0003
+  opacities_lr: 0.01
+  colors_lr: 0.001
+  background_lr: 0.0005

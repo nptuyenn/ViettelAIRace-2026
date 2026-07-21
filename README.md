@@ -91,6 +91,12 @@ Nếu benchmark round2 đã có checkpoint 30k nhưng score còn hơi thấp, fi
 python scripts/benchmark_public_scene.py --split round2 --config configs/round2_finetune.yaml --holdout-ratio 0.1 --require-lpips --min-score 0.60
 ```
 
+Nếu checkpoint 40k vẫn chưa đủ, tiếp tục metric-push lên 50k với SSIM/LPIPS mạnh hơn và antialiased render:
+
+```
+python scripts/benchmark_public_scene.py --split round2 --config configs/round2_metric_push.yaml --holdout-ratio 0.1 --require-lpips --min-score 0.60
+```
+
 Nếu muốn train round2 từ đầu với cấu hình chất lượng cao hơn:
 
 ```

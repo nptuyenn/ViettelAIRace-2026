@@ -34,6 +34,7 @@ class Trainer:
             points_rgb = torch.rand(n, 3).numpy()
 
         background_config = config.get("background", {})
+        render_config = config.get("render", {})
         self.model = GaussianModel(
             points_xyz,
             points_rgb,
@@ -41,6 +42,8 @@ class Trainer:
             sh_degree=config.get("sh_degree", 0),
             background_color=background_config.get("color", (0.0, 0.0, 0.0)),
             learn_background=background_config.get("learnable", False),
+            rasterize_mode=render_config.get("rasterize_mode", "classic"),
+            absgrad=render_config.get("absgrad", False),
         )
         self.lr_config = config["learning_rates"]
         self.optimizer = self._build_optimizer()

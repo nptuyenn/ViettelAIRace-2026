@@ -63,10 +63,15 @@ class GaussianModel(nn.Module):
         sh_degree=0,
         background_color=(0.0, 0.0, 0.0),
         learn_background=False,
+        rasterize_mode="classic",
+        absgrad=False,
     ):
         super().__init__()
         self.device = device
         self.sh_degree = int(sh_degree)
+        self.rasterize_mode = rasterize_mode
+        self.absgrad = bool(absgrad)
+        self.last_render_meta = None
         n = points_xyz.shape[0]
 
         means = torch.from_numpy(points_xyz).float().to(device)
@@ -123,8 +128,11 @@ class GaussianModel(nn.Module):
             width=width,
             height=height,
             sh_degree=active_sh_degree,
+            rasterize_mode=self.rasterize_mode,
+            absgrad=self.absgrad,
             packed=False,
         )
+        self.last_render_meta = meta
         render_color = render_colors[0]
         render_alpha = render_alphas[0]
         render_color = render_color + (1.0 - render_alpha) * self.get_background().view(1, 1, 3)
@@ -183,7 +191,8 @@ class GaussianModel(nn.Module):
 
     @torch.no_grad()
     def densify_from_gradients(self, densify_config):
-        if self.means.grad is None:
+        grad_norm = self._densification_grad_norm(densify_config)
+        if grad_norm is None:
             return 0
 
         max_points = int(densify_config.get("max_points", 300000))
@@ -195,7 +204,6 @@ class GaussianModel(nn.Module):
         jitter_scale = float(densify_config.get("jitter_scale", 0.25))
         scale_shrink = float(densify_config.get("scale_shrink", 0.8))
 
-        grad_norm = self.means.grad.detach().norm(dim=-1)
         candidates = torch.nonzero(grad_norm > grad_threshold, as_tuple=False).flatten()
         if candidates.numel() == 0:
             return 0
@@ -222,6 +230,21 @@ class GaussianModel(nn.Module):
 
         self.append_gaussians(new_means, new_scales, new_quats, new_opacities, new_colors)
         return int(candidates.numel())
+
+    def _densification_grad_norm(self, densify_config):
+        if densify_config.get("use_absgrad", False) and self.last_render_meta is not None:
+            means2d = self.last_render_meta.get("means2d")
+            absgrad = getattr(means2d, "absgrad", None) if means2d is not None else None
+            if absgrad is not None:
+                grad_norm = absgrad.detach().norm(dim=-1)
+                while grad_norm.ndim > 1:
+                    grad_norm = grad_norm.max(dim=0).values
+                if grad_norm.shape[0] == self.num_points():
+                    return grad_norm
+
+        if self.means.grad is None:
+            return None
+        return self.means.grad.detach().norm(dim=-1)
 
     @torch.no_grad()
     def prune_low_opacity(self, pruning_config):
