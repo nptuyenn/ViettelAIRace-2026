@@ -48,9 +48,39 @@ class Trainer:
         self.lr_config = config["learning_rates"]
         self.optimizer = self._build_optimizer()
         self.gt_images = [None] * len(self.scene)
+        self.grad_accum = None
+        self.grad_count = None
 
     def _build_optimizer(self):
         return torch.optim.Adam(self.model.optimizer_param_groups(self.lr_config), eps=1e-15)
+
+    def _reset_densify_stats(self):
+        n = self.model.num_points()
+        self.grad_accum = torch.zeros(n, device=self.device)
+        self.grad_count = torch.zeros(n, device=self.device)
+
+    def _accumulate_densify_stats(self, densify_config):
+        if not densify_config.get("accumulate", False):
+            return
+        scores = self.model.densification_grad_scores(densify_config)
+        if scores is None:
+            return
+        scores = scores.detach()
+        if self.grad_accum is None or self.grad_accum.shape[0] != scores.shape[0]:
+            self._reset_densify_stats()
+        valid = torch.isfinite(scores)
+        self.grad_accum[valid] += scores[valid]
+        self.grad_count[valid] += 1
+
+    def _consume_densify_scores(self):
+        if self.grad_accum is None or self.grad_count is None:
+            return None
+        valid = self.grad_count > 0
+        if not bool(valid.any()):
+            return None
+        scores = torch.zeros_like(self.grad_accum)
+        scores[valid] = self.grad_accum[valid] / self.grad_count[valid].clamp(min=1)
+        return scores
 
     def _update_learning_rates(self, step, num_iters):
         decay_config = self.config.get("lr_decay", {})
@@ -77,7 +107,12 @@ class Trainer:
             until_iter = int(densify_config.get("until_iter", num_iters))
             every = int(densify_config.get("every", 0))
             if every > 0 and from_iter <= step <= until_iter and step % every == 0:
-                stats["added"] = self.model.densify_from_gradients(densify_config)
+                if densify_config.get("accumulate", False):
+                    scores = self._consume_densify_scores()
+                    stats["added"] = self.model.densify_from_scores(scores, densify_config) if scores is not None else 0
+                    self._reset_densify_stats()
+                else:
+                    stats["added"] = self.model.densify_from_gradients(densify_config)
                 topology_changed = topology_changed or stats["added"] > 0
 
         pruning_config = self.config.get("pruning", {})
@@ -98,6 +133,7 @@ class Trainer:
         if topology_changed:
             self.optimizer = self._build_optimizer()
             self._update_learning_rates(step, num_iters)
+            self._reset_densify_stats()
 
         return stats
 
@@ -163,6 +199,7 @@ class Trainer:
 
             self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
+            self._accumulate_densify_stats(self.config.get("densification", {}))
             self.optimizer.step()
 
             refine_stats = self._maybe_refine_gaussians(step, num_iters)

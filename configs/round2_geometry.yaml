@@ -1,11 +1,9 @@
-num_iterations: 40000
+num_iterations: 35000
 log_every: 100
 save_every: 1000
 sh_degree: 3
-lambda_ssim: 0.25
-lambda_lpips: 0.01
-lpips_from_iter: 30000
-lpips_every: 10
+lambda_ssim: 0.22
+lambda_lpips: 0.0
 lpips_net: alex
 
 background:
@@ -18,26 +16,25 @@ render:
 
 lr_decay:
   enabled: true
-  final_factor: 0.005
+  final_factor: 0.01
 
 densification:
   enabled: true
   strategy: clone_split
   accumulate: true
   from_iter: 500
-  until_iter: 20000
+  until_iter: 22000
   every: 250
-  grad_threshold: 0.00008
+  grad_threshold: 0.00006
   use_absgrad: true
-  max_new_points: 4000
+  max_new_points: 5000
   jitter_scale: 0.25
   clone_scale_shrink: 1.0
   split_scale_shrink: 0.6
   split_scale_quantile: 0.75
   split_samples: 2
   new_opacity_scale: 0.8
-  scale_shrink: 0.8
-  max_points: 700000
+  max_points: 800000
 
 pruning:
   enabled: true
@@ -52,9 +49,9 @@ opacity_reset:
   value: 0.1
 
 learning_rates:
-  means_lr: 0.00012
-  scales_lr: 0.003
-  quats_lr: 0.0008
-  opacities_lr: 0.03
-  colors_lr: 0.002
+  means_lr: 0.00014
+  scales_lr: 0.004
+  quats_lr: 0.001
+  opacities_lr: 0.04
+  colors_lr: 0.0022
   background_lr: 0.001

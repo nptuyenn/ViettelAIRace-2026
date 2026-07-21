@@ -82,19 +82,13 @@ python scripts/benchmark_public_scene.py --config configs/competitive.yaml --hol
 Với round2:
 
 ```
-python scripts/benchmark_public_scene.py --split round2 --config configs/competitive.yaml --holdout-ratio 0.1 --no-resume --require-lpips --min-score 0.60
+python scripts/benchmark_public_scene.py --scene HCM0421 --split round2 --config configs/round2_geometry.yaml --holdout-ratio 0.1 --no-resume --require-lpips --min-score 0.60
 ```
 
-Nếu benchmark round2 đã có checkpoint 30k nhưng score còn hơi thấp, fine-tune thêm 10k iter bằng LPIPS nhẹ:
+`round2_geometry.yaml` dùng clone/split densification, tích lũy AbsGrad và antialiased rasterization để tập trung cải thiện geometry trước. Nếu benchmark geometry gần đạt, fine-tune tiếp bằng `round2_quality.yaml`:
 
 ```
-python scripts/benchmark_public_scene.py --split round2 --config configs/round2_finetune.yaml --holdout-ratio 0.1 --require-lpips --min-score 0.60
-```
-
-Nếu checkpoint 40k vẫn chưa đủ, tiếp tục metric-push lên 50k với SSIM/LPIPS mạnh hơn và antialiased render:
-
-```
-python scripts/benchmark_public_scene.py --split round2 --config configs/round2_metric_push.yaml --holdout-ratio 0.1 --require-lpips --min-score 0.60
+python scripts/benchmark_public_scene.py --scene HCM0421 --split round2 --config configs/round2_quality.yaml --holdout-ratio 0.1 --require-lpips --min-score 0.60
 ```
 
 Nếu muốn train round2 từ đầu với cấu hình chất lượng cao hơn:
@@ -167,6 +161,8 @@ Pipeline train hiện đã bật một số cơ chế 3DGS quan trọng trong `c
 ├── configs/
 │   ├── base_config.yaml              # Cấu hình train mặc định cho số vòng lặp, loss và learning rate.
 │   ├── competitive.yaml              # Cấu hình train mạnh hơn: SH degree 2, nhiều iteration hơn và densification rộng hơn.
+│   ├── round2_geometry.yaml          # Cấu hình thử nghiệm geometry round2: AbsGrad tích lũy và clone/split densification.
+│   ├── round2_quality.yaml           # Cấu hình round2 để fine-tune thêm sau benchmark geometry.
 │   └── scene_default.yaml            # Cấu hình mẫu để override riêng cho từng scene khi cần.
 ├── scripts/
 │   ├── train.py                      # Train một scene và lưu checkpoint vào outputs/checkpoints.

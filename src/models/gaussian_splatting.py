@@ -33,6 +33,14 @@ def sh_to_rgb(sh_coeffs):
     return (sh_coeffs[:, 0, :] * SH_C0 + 0.5).clamp(1e-4, 1 - 1e-4)
 
 
+def rotate_vectors_by_quat(vectors, quats):
+    quats = quats / quats.norm(dim=-1, keepdim=True).clamp(min=1e-8)
+    qvec = quats[:, 1:]
+    uv = torch.cross(qvec, vectors, dim=-1)
+    uuv = torch.cross(qvec, uv, dim=-1)
+    return vectors + 2.0 * (quats[:, :1] * uv + uuv)
+
+
 def estimate_initial_log_scale(means, sample_count=1000, ref_count=10000):
     n = means.shape[0]
     if n < 2:
@@ -194,17 +202,29 @@ class GaussianModel(nn.Module):
         grad_norm = self._densification_grad_norm(densify_config)
         if grad_norm is None:
             return 0
+        return self.densify_from_scores(grad_norm, densify_config)
 
+    @torch.no_grad()
+    def densify_from_scores(self, grad_scores, densify_config):
         max_points = int(densify_config.get("max_points", 300000))
         if self.num_points() >= max_points:
             return 0
 
+        strategy = densify_config.get("strategy", "jitter_clone")
+        if strategy == "clone_split":
+            return self._densify_clone_split(grad_scores, densify_config)
+        return self._densify_jitter_clone(grad_scores, densify_config)
+
+    @torch.no_grad()
+    def _densify_jitter_clone(self, grad_scores, densify_config):
+        max_points = int(densify_config.get("max_points", 300000))
         grad_threshold = float(densify_config.get("grad_threshold", 5e-5))
         max_new_points = int(densify_config.get("max_new_points", 5000))
         jitter_scale = float(densify_config.get("jitter_scale", 0.25))
         scale_shrink = float(densify_config.get("scale_shrink", 0.8))
 
-        candidates = torch.nonzero(grad_norm > grad_threshold, as_tuple=False).flatten()
+        grad_scores = grad_scores.detach().to(self.device)
+        candidates = torch.nonzero(grad_scores > grad_threshold, as_tuple=False).flatten()
         if candidates.numel() == 0:
             return 0
 
@@ -214,22 +234,141 @@ class GaussianModel(nn.Module):
             return 0
 
         if candidates.numel() > max_new_points:
-            candidate_grads = grad_norm[candidates]
+            candidate_grads = grad_scores[candidates]
             candidates = candidates[torch.topk(candidate_grads, k=max_new_points, largest=True).indices]
 
         parent_means = self.means.detach()[candidates]
         parent_scales_log = self.scales.detach()[candidates]
         parent_scales = torch.exp(parent_scales_log)
-        jitter = torch.randn_like(parent_means) * parent_scales * jitter_scale
+        parent_quats = self.get_quats().detach()[candidates]
+        local_jitter = torch.randn_like(parent_means) * parent_scales * jitter_scale
+        jitter = rotate_vectors_by_quat(local_jitter, parent_quats)
 
         new_means = parent_means + jitter
         new_scales = parent_scales_log + math.log(max(scale_shrink, 1e-3))
-        new_quats = self.quats.detach()[candidates].clone()
+        new_quats = parent_quats.clone()
         new_opacities = self.opacities.detach()[candidates].clone()
         new_colors = self.colors.detach()[candidates].clone()
 
         self.append_gaussians(new_means, new_scales, new_quats, new_opacities, new_colors)
         return int(candidates.numel())
+
+    @torch.no_grad()
+    def _densify_clone_split(self, grad_scores, densify_config):
+        max_points = int(densify_config.get("max_points", 300000))
+        grad_threshold = float(densify_config.get("grad_threshold", 5e-5))
+        max_new_points = int(densify_config.get("max_new_points", 5000))
+        jitter_scale = float(densify_config.get("jitter_scale", 0.25))
+        split_samples = max(2, int(densify_config.get("split_samples", 2)))
+        clone_scale_shrink = float(densify_config.get("clone_scale_shrink", 1.0))
+        split_scale_shrink = float(densify_config.get("split_scale_shrink", 0.6))
+        split_scale_quantile = float(densify_config.get("split_scale_quantile", 0.75))
+        opacity_scale = float(densify_config.get("new_opacity_scale", 0.8))
+
+        n = self.num_points()
+        remaining = max_points - n
+        if remaining <= 0:
+            return 0
+        max_new_points = max(0, min(max_new_points, remaining))
+        if max_new_points == 0:
+            return 0
+
+        grad_scores = grad_scores.detach().to(self.device)
+        candidates = torch.nonzero(grad_scores > grad_threshold, as_tuple=False).flatten()
+        if candidates.numel() == 0:
+            return 0
+
+        if candidates.numel() > max_new_points:
+            candidate_grads = grad_scores[candidates]
+            candidates = candidates[torch.topk(candidate_grads, k=max_new_points, largest=True).indices]
+
+        scales_log = self.scales.detach()
+        scales = torch.exp(scales_log)
+        max_scale = scales.max(dim=-1).values
+        split_threshold = densify_config.get("split_scale_threshold")
+        if split_threshold is None:
+            split_threshold = torch.quantile(max_scale, split_scale_quantile).item()
+        split_threshold = float(split_threshold)
+
+        split_candidates = candidates[max_scale[candidates] > split_threshold]
+        clone_candidates = candidates[max_scale[candidates] <= split_threshold]
+
+        new_means = []
+        new_scales = []
+        new_quats = []
+        new_opacities = []
+        new_colors = []
+        parents_to_remove = []
+        created = 0
+
+        split_parent_budget = max_new_points // split_samples
+        if split_candidates.numel() > split_parent_budget:
+            if split_parent_budget <= 0:
+                split_candidates = split_candidates[:0]
+            else:
+                split_scores = grad_scores[split_candidates]
+                split_candidates = split_candidates[torch.topk(split_scores, k=split_parent_budget, largest=True).indices]
+
+        if split_candidates.numel() > 0:
+            parent_means = self.means.detach()[split_candidates]
+            parent_scales_log = scales_log[split_candidates]
+            parent_scales = scales[split_candidates]
+            parent_quats = self.get_quats().detach()[split_candidates]
+            repeated = split_candidates.repeat_interleave(split_samples)
+            child_count = int(repeated.numel())
+            local_jitter = (
+                torch.randn(child_count, 3, device=self.device)
+                * parent_scales.repeat_interleave(split_samples, dim=0)
+                * jitter_scale
+            )
+            jitter = rotate_vectors_by_quat(local_jitter, parent_quats.repeat_interleave(split_samples, dim=0))
+            new_means.append(parent_means.repeat_interleave(split_samples, dim=0) + jitter)
+            new_scales.append(parent_scales_log.repeat_interleave(split_samples, dim=0) + math.log(max(split_scale_shrink, 1e-3)))
+            new_quats.append(parent_quats.repeat_interleave(split_samples, dim=0).clone())
+            new_opacities.append(self._scaled_opacities(repeated, opacity_scale / split_samples))
+            new_colors.append(self.colors.detach()[repeated].clone())
+            parents_to_remove = split_candidates
+            created += child_count
+
+        remaining_new = max_new_points - created
+        clone_budget = max(0, remaining_new)
+        if clone_candidates.numel() > clone_budget:
+            if clone_budget <= 0:
+                clone_candidates = clone_candidates[:0]
+            else:
+                clone_scores = grad_scores[clone_candidates]
+                clone_candidates = clone_candidates[torch.topk(clone_scores, k=clone_budget, largest=True).indices]
+        if clone_candidates.numel() > 0:
+            parent_scales = scales[clone_candidates]
+            parent_quats = self.get_quats().detach()[clone_candidates]
+            local_jitter = torch.randn_like(self.means.detach()[clone_candidates]) * parent_scales * jitter_scale
+            jitter = rotate_vectors_by_quat(local_jitter, parent_quats)
+            new_means.append(self.means.detach()[clone_candidates] + jitter)
+            new_scales.append(scales_log[clone_candidates] + math.log(max(clone_scale_shrink, 1e-3)))
+            new_quats.append(parent_quats.clone())
+            new_opacities.append(self._scaled_opacities(clone_candidates, opacity_scale))
+            new_colors.append(self.colors.detach()[clone_candidates].clone())
+            created += int(clone_candidates.numel())
+
+        if created == 0:
+            return 0
+
+        keep_mask = torch.ones(n, dtype=torch.bool, device=self.device)
+        if len(parents_to_remove) != 0:
+            keep_mask[parents_to_remove] = False
+
+        self._replace_parameters(
+            torch.cat([self.means.detach()[keep_mask], *new_means], dim=0),
+            torch.cat([self.scales.detach()[keep_mask], *new_scales], dim=0),
+            torch.cat([self.quats.detach()[keep_mask], *new_quats], dim=0),
+            torch.cat([self.opacities.detach()[keep_mask], *new_opacities], dim=0),
+            torch.cat([self.colors.detach()[keep_mask], *new_colors], dim=0),
+        )
+        return created
+
+    def _scaled_opacities(self, indices, scale):
+        opacities = torch.sigmoid(self.opacities.detach()[indices]) * float(scale)
+        return inverse_sigmoid(opacities.clamp(1e-4, 1 - 1e-4))
 
     def _densification_grad_norm(self, densify_config):
         if densify_config.get("use_absgrad", False) and self.last_render_meta is not None:
@@ -245,6 +384,9 @@ class GaussianModel(nn.Module):
         if self.means.grad is None:
             return None
         return self.means.grad.detach().norm(dim=-1)
+
+    def densification_grad_scores(self, densify_config):
+        return self._densification_grad_norm(densify_config)
 
     @torch.no_grad()
     def prune_low_opacity(self, pruning_config):

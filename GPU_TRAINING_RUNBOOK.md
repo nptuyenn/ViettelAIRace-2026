@@ -105,8 +105,9 @@ export TORCH_CUDA_ARCH_LIST="8.6"
 rm -rf ~/viettel_airace/outputs/public_benchmark_checkpoints
 
 python3 scripts/benchmark_public_scene.py \
+  --scene HCM0421 \
   --split round2 \
-  --config configs/competitive.yaml \
+  --config configs/round2_geometry.yaml \
   --holdout-ratio 0.1 \
   --no-resume \
   --require-lpips \
@@ -121,31 +122,21 @@ cat ~/viettel_airace/outputs/public_benchmark.json
 
 Nếu `score_mean < 0.60`, khoan train private.
 
-Nếu benchmark đã có checkpoint 30k và score gần đạt, ví dụ khoảng `0.57-0.59`, fine-tune thêm 10k iter:
+`round2_geometry.yaml` train từ đầu với clone/split densification, tích lũy AbsGrad và antialiased rasterization. Đây là nhánh nên thử sau khi cấu hình 40k/50k cũ bị kẹt quanh `0.57-0.58`.
+
+Nếu benchmark geometry đã gần đạt, ví dụ khoảng `0.58-0.60`, có thể fine-tune tiếp bằng loss cảm quan nhẹ:
 
 ```bash
 python3 scripts/benchmark_public_scene.py \
+  --scene HCM0421 \
   --split round2 \
-  --config configs/round2_finetune.yaml \
+  --config configs/round2_quality.yaml \
   --holdout-ratio 0.1 \
   --require-lpips \
   --min-score 0.60
 ```
 
-Lệnh fine-tune trên cố ý không có `--no-resume`, để tiếp tục từ checkpoint benchmark hiện có.
-
-Nếu checkpoint 40k vẫn chưa đạt `0.60`, tiếp tục metric-push lên 50k:
-
-```bash
-python3 scripts/benchmark_public_scene.py \
-  --split round2 \
-  --config configs/round2_metric_push.yaml \
-  --holdout-ratio 0.1 \
-  --require-lpips \
-  --min-score 0.60
-```
-
-Lệnh này cũng cố ý không có `--no-resume`, để resume từ checkpoint 40k.
+Lệnh fine-tune trên cố ý không có `--no-resume`, để tiếp tục từ checkpoint geometry hiện có. Không nên dùng `round2_metric_push.yaml` làm đường chính nữa vì lần thử HCM0421 của bạn đã tụt từ khoảng `0.579` xuống `0.550`.
 
 Thoát khỏi `tmux` mà job vẫn chạy:
 
@@ -192,23 +183,23 @@ python3 scripts/validate_submission.py \
 
 python3 scripts/package_submission.py \
   --rendered_dir ~/viettel_airace/outputs/rendered \
-  --output ~/viettel_airace/outputs/submission_round1.zip
+  --output ~/viettel_airace/outputs/submission_round2.zip
 
 python3 scripts/validate_submission.py \
   --split round2 \
-  --zip ~/viettel_airace/outputs/submission_round1.zip
+  --zip ~/viettel_airace/outputs/submission_round2.zip
 ```
 
 File nộp:
 
 ```text
-~/viettel_airace/outputs/submission_round1.zip
+~/viettel_airace/outputs/submission_round2.zip
 ```
 
 Tải về local:
 
 ```bash
-scp -P PORT root@IP:~/viettel_airace/outputs/submission_round1.zip .
+scp -P PORT root@IP:~/viettel_airace/outputs/submission_round2.zip .
 ```
 
 ## Ghi Chú Nhanh
