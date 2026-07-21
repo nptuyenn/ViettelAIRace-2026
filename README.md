@@ -85,6 +85,18 @@ Với round2:
 python scripts/benchmark_public_scene.py --split round2 --config configs/competitive.yaml --holdout-ratio 0.1 --no-resume --require-lpips --min-score 0.60
 ```
 
+Nếu benchmark round2 đã có checkpoint 30k nhưng score còn hơi thấp, fine-tune thêm 10k iter bằng LPIPS nhẹ:
+
+```
+python scripts/benchmark_public_scene.py --split round2 --config configs/round2_finetune.yaml --holdout-ratio 0.1 --require-lpips --min-score 0.60
+```
+
+Nếu muốn train round2 từ đầu với cấu hình chất lượng cao hơn:
+
+```
+python scripts/benchmark_public_scene.py --split round2 --config configs/round2_quality.yaml --holdout-ratio 0.1 --no-resume --require-lpips --min-score 0.60
+```
+
 Co the dat nguong de fail som neu config chua on:
 
 ```

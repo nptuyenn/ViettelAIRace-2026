@@ -104,6 +104,19 @@ class Trainer:
             self.gt_images[index] = pil_to_tensor(image).to(self.device)
         return self.gt_images[index]
 
+    def _lpips_weight_for_step(self, step):
+        lambda_lpips = float(self.config.get("lambda_lpips", 0.0))
+        if lambda_lpips <= 0:
+            return 0.0
+
+        from_iter = int(self.config.get("lpips_from_iter", 0))
+        every = int(self.config.get("lpips_every", 1))
+        if step < from_iter:
+            return 0.0
+        if every > 1 and step % every != 0:
+            return 0.0
+        return lambda_lpips
+
     def train(self, output_checkpoint_dir, resume=True):
         num_iters = self.config["num_iterations"]
         log_every = self.config.get("log_every", 100)
@@ -141,7 +154,7 @@ class Trainer:
                 pred,
                 gt,
                 lambda_ssim=self.config.get("lambda_ssim", 0.2),
-                lambda_lpips=self.config.get("lambda_lpips", 0.0),
+                lambda_lpips=self._lpips_weight_for_step(step),
                 lpips_net=self.config.get("lpips_net", "alex"),
             )
 

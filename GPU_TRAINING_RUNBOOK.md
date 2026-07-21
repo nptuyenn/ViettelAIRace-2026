@@ -9,11 +9,11 @@ Trên máy local Windows, mở Git Bash:
 ```bash
 cd /d/ViettelAIRace-2026
 git pull origin main
-tar -czf data_viettel.tar.gz VAI_NVS_DATA_ROUND2 data/public_set data/private_set1
-ls -lh data_viettel.tar.gz
+tar -czf round2_data.tar.gz VAI_NVS_DATA_ROUND2
+ls -lh round2_data.tar.gz
 ```
 
-Giữ file `data_viettel.tar.gz` lại. Lần sau nếu data không đổi thì không cần nén lại.
+Giữ file `round2_data.tar.gz` lại. Lần sau nếu data round2 không đổi thì không cần nén lại.
 
 ## 1. Khi Có Máy GPU Mới
 
@@ -35,7 +35,7 @@ ssh -p PORT root@IP
 Upload data archive từ máy local:
 
 ```bash
-scp -P PORT /d/ViettelAIRace-2026/data_viettel.tar.gz root@IP:~/viettel_airace/
+scp -P PORT /d/ViettelAIRace-2026/round2_data.tar.gz root@IP:~/viettel_airace/
 ```
 
 ## 2. Setup Server GPU
@@ -45,7 +45,7 @@ Chạy block này trên server sau khi SSH vào:
 ```bash
 mkdir -p ~/viettel_airace/outputs
 cd ~/viettel_airace
-tar -xzf data_viettel.tar.gz
+tar -xzf round2_data.tar.gz
 
 apt-get update
 apt-get install -y git build-essential ninja-build tmux python3-dev python3.10-dev
@@ -82,9 +82,8 @@ PY
 Kiểm tra data:
 
 ```bash
-ls -lah ~/viettel_airace/data
-ls ~/viettel_airace/data/public_set | head
-ls ~/viettel_airace/data/private_set1 | head
+ls -lah ~/viettel_airace/VAI_NVS_DATA_ROUND2
+ls ~/viettel_airace/VAI_NVS_DATA_ROUND2 | head
 ```
 
 ## 3. Chạy Benchmark Public Trong `tmux`
@@ -122,6 +121,19 @@ cat ~/viettel_airace/outputs/public_benchmark.json
 
 Nếu `score_mean < 0.60`, khoan train private.
 
+Nếu benchmark đã có checkpoint 30k và score gần đạt, ví dụ khoảng `0.57-0.59`, fine-tune thêm 10k iter:
+
+```bash
+python3 scripts/benchmark_public_scene.py \
+  --split round2 \
+  --config configs/round2_finetune.yaml \
+  --holdout-ratio 0.1 \
+  --require-lpips \
+  --min-score 0.60
+```
+
+Lệnh fine-tune trên cố ý không có `--no-resume`, để tiếp tục từ checkpoint benchmark hiện có.
+
 Thoát khỏi `tmux` mà job vẫn chạy:
 
 ```text
@@ -144,7 +156,7 @@ export OUTPUT_ROOT=~/viettel_airace/outputs
 
 python3 scripts/train_all_scenes.py \
   --split round2 \
-  --config configs/competitive.yaml \
+  --config configs/round2_quality.yaml \
   --no-resume
 ```
 
@@ -153,7 +165,7 @@ Nếu bị ngắt giữa chừng, resume bằng cách bỏ `--no-resume`:
 ```bash
 python3 scripts/train_all_scenes.py \
   --split round2 \
-  --config configs/competitive.yaml
+  --config configs/round2_quality.yaml
 ```
 
 ## 5. Render, Validate, Package
@@ -188,7 +200,7 @@ scp -P PORT root@IP:~/viettel_airace/outputs/submission_round1.zip .
 
 ## Ghi Chú Nhanh
 
-- Đừng dùng `scp -r` cho từng ảnh nếu không bắt buộc. Hãy upload `data_viettel.tar.gz`.
+- Đừng dùng `scp -r` cho từng ảnh nếu không bắt buộc. Hãy upload `round2_data.tar.gz`.
 - Nếu nhà cung cấp có persistent volume, hãy lưu data ở volume đó để lần sau không cần upload lại.
 - RTX 3090 dùng `TORCH_CUDA_ARCH_LIST="8.6"`.
 - Nếu build `gsplat` báo thiếu `Python.h`, cài `python3-dev python3.10-dev`.
